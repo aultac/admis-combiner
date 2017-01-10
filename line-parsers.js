@@ -61,7 +61,7 @@ const _LP = {
   //Activity:                                                                                                   111111111111111111
   //          111111111122222222223333333333444444444455555555556666666666777777777788888888889999999999000000000011111111
   //0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567
-  //  5/10/6                        9  PUT  DEC 16 CORN           350  A     NET PREM  US                         6,335.91
+  //  5/10/6                        9  PUT  DEC 16 CORN           350  A     NET PREM  US                         6,335.91   TRANSFERTRADE
   //  5/25/6            10         10  DEC 16 CORN                     A          P&L  US                         4,625.00'},
   //Positions:
   //  9/24/4            10             DEC 16 CORN                     A     3.97 3/4  US       1,250.00
@@ -69,7 +69,8 @@ const _LP = {
   parseSell: lineobj => +(lineobj.line.slice(27,33).trim()),
   parseQty:  lineobj => {
     const netqty = _LP.parseBuy(lineobj) - _LP.parseSell(lineobj); // negative for sell, positive for buy
-    if (_LP.parseTxType(lineobj) === 'FUTURES') {
+    const txtype = _LP.parseTxType(lineobj);
+    if (txtype === 'FUTURES') {
       if (netqty === 0) {
         if (_LP.hasInitialValuePerUnit(lineobj))
           throw parseErr(lineobj, 'parseQty: netqty is 0 and type is futures, but this is a positions line with an initialValuePerUnit.  That should not happen.');
@@ -79,6 +80,16 @@ const _LP = {
         throw parseErr(lineobj, 'parseQty: line is FUTURES and is an activity line (no initialValuePerUnit), but netqty is not 0!');
       return netqty; // positions lines have a valid netqty
     }
+
+    // Options can expire, and when they do the only thing wrong with statement is the quantity
+    // should reverse: i.e. if a set of bought PUT options expire, it lists them as bought PUT
+    // options.  Should instead be a set of sold PUT options at 0 value.
+    // See 2016-12/262-V8956_2016-12-30.txt for example.
+    const pricelegend = _LP.parsePriceLegend(lineobj);
+    if (pricelegend === 'EXPIRE' && (txtype === 'PUT' || txtype === 'CALL')) {
+      return 0 - netqty;
+    }
+
     return netqty;
   },
   // parseDescription returns things like 'PUT DEC16 CORN 350'
@@ -90,20 +101,29 @@ const _LP = {
   parsePriceLegend: lineobj => lineobj.line.slice(71,81).trim(),
   parseTxType : lineobj => {
     const desc = _LP.parseDescription(lineobj);
-    if (desc.match(/^PUT/)) return 'PUT';
-    if (desc.match(/^CALL/)) return 'CALL';
-    if (desc.match(/^Ach (Sent|Received)/)) return 'TRANSFER';
+    let txtype = '';
+         if (desc.match(/^PUT/)) txtype = 'PUT';
+    else if (desc.match(/^CALL/)) txtype = 'CALL';
+    else if (desc.match(/^Ach (Sent|Received)/)) txtype = 'TRANSFER';
+    else if (desc.match(/^WIRE TRANSFER REC/)) txtype = 'TRANSFER';
     // Futures are weird, because the true entries are added later after parsing
     // fee and/or P&L lines.  If this is a 'FUTURES' line from the original statement,
     // then it is either a P&L line or a FEES line only.
-    if (desc.match(/^[A-F]{3}[0-9]{2}/)) {
+    else if (desc.match(/^[A-F]{3}[0-9]{2}/)) {
       const pricelegend = _LP.parsePriceLegend(lineobj);
-      if (pricelegend.match(/FEE\/COMM/)) return 'FEES';
-      if (pricelegend.match(/P\&L/)) return 'FUTURES';
-      if (_LP.hasInitialValuePerUnit(lineobj)) return 'FUTURES'; // this was a position line instead of an activity line
-      throw parseErr(lineobj, 'parseTxType: line was futures activity (not positions), but PRICE/LEGND was neither P&L or FEE/COMM');
+           if (pricelegend.match(/FEE\/COMM/)) txtype = 'FEES';
+      else if (pricelegend.match(/P\&L/)) txtype = 'FUTURES';
+      else if (pricelegend.match(/CANCEL/)) txtype = 'CANCEL';
+      else if (_LP.hasInitialValuePerUnit(lineobj)) txtype = 'FUTURES'; // this was a position line instead of an activity line
+      else
+        throw parseErr(lineobj, 'parseTxType: line was futures activity (not positions), desc = '+desc+', but PRICE/LEGND ('+pricelegend+') was neither P&L or FEE/COMM');
+    } else {
+      throw parseErr(lineobj, 'parseTxType: was not PUT, CALL, FUTURES, or TRANSFER.  line is '+JSON.stringify(lineobj,false,'  '));
     }
-    throw parseErr(lineobj, 'parseTxType: was not PUT, CALL, FUTURES, or CASH')
+    // for any trades transferred from morgan stanley, prune.js added a 'TRANSFERTRADE' to the end of the main line.
+    // Results in TRANSFER-PUT, TRANSFER-FUTURES, etc.  Not to be confused with a normal cash Ach which is just 'TRANSFER'
+    if (lineobj.line.match(/TRANSFERTRADE/)) txtype = 'TRANSFER-'+txtype;
+    return txtype;
   },
   parseCommodity: lineobj => {
     const desc = _LP.parseDescription(lineobj);
@@ -111,11 +131,12 @@ const _LP = {
     if (desc.match(/SOYBEANS/)) return 'SOYBEANS';
     if (desc.match(/LIVE CATTLE/)) return 'LIVE CATTLE';
     if (desc.match(/Ach (Sent|Received)/)) return 'CASH';
-    throw parseErr(lineobj, 'parseCommodity: was not CORN, SOYBEANS, or LIVE CATTLE')
+    if (desc.match(/WIRE TRANSFER REC/)) return 'CASH';
+    throw parseErr(lineobj, 'parseCommodity: description ('+desc+') did not match rules for CORN, SOYBEANS, LIVE CATTLE, or CASH')
   },
   hasStrike: lineobj => {
     const type = _LP.parseTxType(lineobj);
-    return type === 'PUT' || type === 'CALL';
+    return type === 'PUT' || type === 'CALL' || type === 'TRANSFER-PUT' || type === 'TRANSFER-CALL';
   },
   parseStrike: lineobj => {
     const desc = _LP.parseDescription(lineobj);
@@ -144,7 +165,10 @@ const _LP = {
     return +(parts[1]) + fraction;
   },
   parseDebit: lineobj => -1.0*+(lineobj.line.slice(87,100).replace(/,/g,'').trim()),
-  parseCredit: lineobj => +(lineobj.line.slice(101,118).replace(/,/g,'').trim()),
+  parseCredit: lineobj => {
+    if (lineobj.line.length < 118) return 0; // put line with 'TRANSFERTRADE' that I tacked on the end
+    return +(lineobj.line.slice(101,118).replace(/,/g,'').trim());
+  },
   parseAmount: lineobj => _LP.parseCredit(lineobj) + _LP.parseDebit(lineobj),
 
   // Summary line parsers:
@@ -155,6 +179,7 @@ const _LP = {
     if (l.match(/^3. ENDING ACCT BALANCE/)) return l;
     if (l.match(/^4. NET FUTURES P&L/)) return l;
     if (l.match(/^5. NET OPTION PREMIUM/)) return l;
+    if (l.match(/^6. FUT OPEN TRADE EQUITY/)) return l;
     if (l.match(/^8. OPTIONS MARKET VALUE/)) return l;
     if (l.match(/^9. ACCT VALUE AT MARKET/)) return l;
     if (l.match(/^11. CONVERTED ACCT VALUE US/)) return l;

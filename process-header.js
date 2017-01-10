@@ -23,7 +23,8 @@ module.exports = input => {
 
     // if inHeader, look for last header line and don't push any lines
     if (inHeader) {
-      if (lineobj.line.match(/Y O U R   A C T I V I T Y   T H I S   M O N T H/)) {
+      if (   lineobj.line.match(/Y O U R   A C T I V I T Y   T H I S   M O N T H/)
+          || lineobj.line.match(/P O S I T I O N S   I N   Y O U R   A C C O U N T/)) {
         acc.push(lineobj); // The initial header has this indicator line for activity actually before the 
         return acc;        // column titles line, so include it in output and don't count against header linecount.
       }
@@ -32,7 +33,7 @@ module.exports = input => {
         inHeader = false; // next line is keeper
         // Otherwise, it's 11.
         if (headerLineCount !== 11) {
-          throw headerErr('headerLineCount !== 11 , it is '+headerLineCount+' instead');
+          throw headerErr('headerLineCount !== 11 , it is '+headerLineCount+' instead for statement '+input.stmt);
         }
       }
       return acc;

@@ -51,7 +51,7 @@ function parseActivity(lines) {
       r.trademonth = lp.parseTradeMonth(line);
     }
     // only options have strikes:
-    if (r.txtype === 'PUT' || r.txtype === 'CALL')
+    if (r.txtype === 'PUT' || r.txtype === 'CALL' || r.txtype === 'TRANSFER-PUT' || r.txtype === 'TRANSFER-CALL')
       r.strike = lp.parseStrike(line);
     // corn,beans have 5000 bu/cont, cattle 400 cwt/cont, fees are 1 fee/cont
     r.unitsPerContract = util.unitsPerContract(r);
@@ -93,7 +93,7 @@ function parsePositions(lines) {
     };
     // Now the weirdness:
     // only options have strikes:
-    if (r.txtype === 'PUT' || r.txtype === 'CALL')
+    if (r.txtype === 'PUT' || r.txtype === 'CALL' || r.txtype === 'TRANSFER-PUT' || r.txtype === 'TRANSFER-CALL')
       r.strike = lp.parseStrike(line);
     // corn,beans have 5000 bu/cont, cattle 400 cwt/cont, fees are 1 fee/cont
     if (r.commodity === 'LIVE CATTLE')

@@ -49,10 +49,11 @@ module.exports = ({month,year,basedir,force}) => {
   const outfilename = basedir+'/'+year+'-'+month+'_Combined.xlsx';
   return input => {
     const wb = {
-      SheetNames: [ 'activity', 'positions' ],
+      SheetNames: [ 'activity', 'positions', 'summary' ],
       Sheets: {
         activity: {},
         positions: {},
+        summary: {},
       },
     };
 
@@ -62,22 +63,32 @@ module.exports = ({month,year,basedir,force}) => {
       cols: [ 'date','qty','txtype','trademonth','commodity','strike',
               'unitsPerContract','valuePerUnit','amount','balance',
               'initialDate','initialQtyClosedHere','initialValuePerUnit',
-              'initialAmount','netAmount','netPerUnit','acct','stmt'],
+              'initialAmount','netAmount','netPerUnit','acct','stmt','lineno'],
     });
     wb.Sheets.positions = jsonToSheet({
       arr: input.positions,
       cols: [ 'date','qty','txtype','trademonth','commodity','strike',
               'unitsPerContract','initialValuePerUnit','currentValuePerUnit',
-              'initialAmount', 'currentAmount', 'netAmount', 'acct', 'stmt' ],
+              'initialAmount', 'currentAmount', 'netAmount', 'acct', 'stmt', 'lineno' ],
+    });
+    wb.Sheets.summary = jsonToSheet({
+      arr: input.summary,
+      cols: [ 'type', 'amount', 'acct', 'stmt', 'lineno' ],
     });
 
+    let canoverwrite = true;
     return fs.statAsync(outfilename)
     .then(stats => {
       if (stats.isFile() && !force) {
+        canoverwrite = false;
         throw err('exporter: cowardly refusing to overwrite existing '+outfilename+' without the --force option');
       }
-      xlsx.writeFile(wb, outfilename);
-      console.log(chalk.green('Wrote file '+outfilename));
+      return stats;
+    }).then(stats => {
+      if (canoverwrite) {
+        xlsx.writeFile(wb, outfilename);
+        console.log(chalk.green('Wrote file '+outfilename));
+      }
     });
   };
 };

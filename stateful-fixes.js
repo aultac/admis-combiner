@@ -8,9 +8,10 @@ function statefulErr(message) {
 }
 
 // Fill in any "stateful" info that can't be known from single line:
-// - insert XXXXX fee for each options transaction line
+// - NOTE: options fees are already included in net premium on monthly statements.
 // - fix buy/sell qty for futures P&L line above a fee using qty from fee
 // - insert new buy/sell $0 amount item for fee that isn't preceded by closeout futures
+// - remove any 'CANCEL' TX types
 
 function newFuturesLineFromFees(fees,input) {
   const futures = _.cloneDeep(fees);
@@ -56,6 +57,9 @@ function main(input) {
   const output = _.cloneDeep(input);
 
   output.activity = _.reduce(activity, (acc,obj,index) => {
+    // If this is a 'CANCEL' line, don't push it onto accumulator
+    if (obj.txtype === 'CANCEL') return acc;
+
     // If this is a futures line, need to fill in qty from line below it
     if (obj.txtype === 'FUTURES') {
       if (obj.qty !== 'XXXXXX')

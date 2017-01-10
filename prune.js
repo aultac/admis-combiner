@@ -6,6 +6,7 @@ module.exports = input => {
   const output = _.cloneDeep(input);
 
   // activity section:
+  activity = markTransferTrades(activity); // only on first month when transferring from MorganStanley
   activity = removeNonDates(activity);
   activity = removeMatches(activity, / MEMO P&L /);
 
@@ -44,6 +45,19 @@ function removeUninterestingSummaryLines(lines) {
       || line.match(/ACCT VALUE AT MARKET/)
       || line.match(/CONVERTED ACCT VALUE US/)
     );
+  });
+}
+
+//  4/27/6             4             PUT  DEC 16 LIVE CATTLE   1160  B     NET PREM  US      11,800.00
+//                                   TRANSFER TRADE
+function markTransferTrades(lines) {
+  // Transfer trades have a line with 'TRANSFER TRADE' underneath the main line.  If it is a transfer trade,
+  // append '   TRANSFERTRADE' onto the main line to keep track for a later txtype.
+  return _.map(lines, (l,index) => {
+    if (index === lines.length-1) return l;
+    const nextline = lines[index+1];
+    if (nextline.line.match(/TRANSFER TRADE/)) l.line += '   TRANSFERTRADE';
+    return l;
   });
 }
 
