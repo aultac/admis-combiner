@@ -38,7 +38,7 @@ const _LP = {
   isSectionSplit: lineobj => (typeof lineobj.line === 'string' && (
                                lineobj.line.match(/P O S I T I O N S   I N   Y O U R  A C C O U N T/)
                             || lineobj.line.match(/Y O U R   A C T I V I T Y   T H I S   M O N T H/)
-                            || lineobj.line.match(/SEG USD/))),
+                            || lineobj.line.match(/\*\*\* SEG USD \*\*\*/))),
 
   //   DATE            LONG/BUY  SHRT/SELL      DESCRIPTION           EX   PRICE/LEGND CC          DEBIT            CREDIT
   //  5/10/6                        9  PUT  DEC 16 CORN           350  A     NET PREM  US                         6,335.91

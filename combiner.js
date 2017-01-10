@@ -18,7 +18,7 @@ module.exports = (output,input) => {
     const outindex = _.findIndex(output.summary, s => s.type === i.type);
     if (outindex < 0) {
       // this input item does not exist in output, put it in verbatim
-      output.summary.push(i);
+      output.summary.push(_.cloneDeep(i));
     } else {
       // this input item already exists in output, add them together.
       output.summary[outindex].amount += i.amount;

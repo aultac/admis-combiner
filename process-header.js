@@ -30,8 +30,11 @@ module.exports = input => {
       }
       headerLineCount++;
       if (isColumnTitles(lineobj) || isSectionSplit(lineobj)) {
+        // There is an edge case where *** SEG USD *** line which starts summary is located
+        // immediately below header.  In that case, you have to push the current line 
+        // because the sectionizer needs the SEG USD line to find start of summary
+        if (lineobj.line.match(/\*\*\* SEG USD \*\*\*/)) acc.push(lineobj);
         inHeader = false; // next line is keeper
-        // Otherwise, it's 11.
         if (headerLineCount !== 11) {
           throw headerErr('headerLineCount !== 11 , it is '+headerLineCount+' instead for statement '+input.stmt);
         }
